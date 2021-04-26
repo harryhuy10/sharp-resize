@@ -3,28 +3,38 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-
-const app = express();
-var bodyParser = require('body-parser');
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded());
-// in latest body-parser use like below.
-app.use(bodyParser.urlencoded({ extended: true }));
-const server = app.listen(8000, () => {
-    console.log('Server started');
-    const host = server.address().address === '::' ? 'localhost' : server.address().address;
-    const port = server.address().port;
-    console.log('Server is listening at http://%s:%s', host, port);
+const slug = require('slug');
+const sharp = require('sharp');
+var cors = require('cors');
+var engines = require('consolidate');
+require('dotenv').config({
+  path: `.env.${process.env.NODE_ENV || 'development'}`,
 });
 
-let fileName;
+const app = express();
+
+function makeid(length) {
+  var result = '';
+  var characters =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  var charactersLength = characters.length;
+  for (let i = 0; i < length; i++) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+  }
+  return result;
+}
 
 var storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, 'uploads');
   },
   filename: function (req, file, cb) {
-    fileName = file.originalname;
+    const fileName =
+      slug(file.originalname, '-') +
+      '-' +
+      makeid(10) +
+      '.' +
+      path.extname(file.originalname).slice(1);
     cb(null, fileName);
   },
 });
@@ -33,19 +43,35 @@ var upload = multer({
   storage: storage,
   fileFilter: function (req, file, callback) {
     var ext = path.extname(file.originalname);
+    ext = ext.toLowerCase();
     if (
       ext !== '.png' &&
       ext !== '.jpg' &&
-      ext !== '.gif' &&
       ext !== '.jpeg' &&
-      ext != '.bmp'
+      ext !== '.gif' &&
+      ext !== '.bmp' &&
+      ext !== '.tiff' &&
+      ext !== '.webP'
     ) {
-      return callback(/*res.end('Only images are allowed')*/ null, false);
+      return callback(
+        /*res.end('Only images are allowed')*/ 'We only accept png, jpg, bmp, gif, jpeg, webp, tiff',
+        false
+      );
     }
 
     callback(null, true);
   },
 });
+console.log('=========================', path.join(__dirname, 'resized'));
+
+app.use(express.static(path.join(__dirname, 'views')));
+app.engine('html', engines.mustache);
+app.get('/', function (req, res) {
+  res.render('index.html');
+});
+
+app.use(cors());
+app.use('/images', express.static(path.join(__dirname, 'resized')));
 const html = `<html>
 <head>
 
@@ -89,65 +115,43 @@ const html = `<html>
 app.get('/', (req, res, next) => {
   res.send(html);
 });
-
-app.post('/resize', upload.single('file'), (req, res, next) => {
+app.post('/resize', upload.single('file'), async (req, res, next) => {
   const file = req.file;
-  console.log('[req.file]', file);
-  const { widthString, heightString } = req.body;
-
+  console.log('===============file', file);
   if (!file) {
     const error = new Error('Please upload a file');
     error.httpStatusCode = 400;
     return next(error);
   }
+  const fileName = req.file.filename;
+  let image = sharp(path.join(__dirname, req.file.path));
 
-  if (!widthString || !heightString) {
-    const error = new Error('Please specify the width and height');
-    error.httpStatusCode = 400;
-    return next(error);
-  }
+  const meta = await image.metadata();
 
   const dimension = {
-    width: +widthString,
-    height: +heightString,
+    width: +meta.width,
+    height: +meta.height,
   };
 
-  var imgPath = './uploads/' + fileName;
-  var resizePath = './resized/' + fileName;
+  let resizePath = './resized/' + fileName;
+  const imgPath = './uploads/' + fileName;
 
-  var mime = {
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    png: 'image/png',
-    bmp: 'image/bmp',
-  };
+  resizePath = resizePath.slice(0, -4) + '.jpg'; // Convert to JPEG for lighter image size
+  const resizeMethod = resizeSharp;
 
-  const type = mime[path.extname(resizePath).slice(1)] || 'text/plain';
-  var resizeMethod;
-  if (type === 'image/png' || type === 'image/bmp') {
-    resizeMethod = resizeJimp;
-    resizePath = resizePath.slice(0, -4) + '.jpg'; // Convert to JPEG for lighter image size
-  } else {
-    resizeMethod = resizeSharp;
-  }
+  console.log('imgPath', imgPath);
+  console.log('resizePath', resizePath);
+  console.log('dimension', dimension);
 
   resizeMethod(imgPath, resizePath, dimension, (err, result) => {
-    const s = fs.createReadStream(resizePath);
     if (err) {
-      res.set('Content-Type', 'text/plain');
-      res.status(404).end('Not found');
-    } else {
-      s.on('open', function () {
-        res.set('Content-Type', type);
-        s.pipe(res);
-      });
-      s.on('error', function () {
-        res.set('Content-Type', 'text/plain');
-        res.status(404).end('Not found');
-      });
+      console.log(err);
+      throw new Error('Resize image error');
     }
-    clearImages('./resized');
-    clearImages('./uploads');
+    console.log();
+    return res.json({
+      url: process.env.BASE_URL + '/images/' + path.basename(resizePath),
+    });
   });
 });
 
@@ -164,3 +168,10 @@ function clearImages(directory) {
     }
   });
 }
+const server = app.listen(8000, () => {
+  console.log('Server started');
+  const host =
+    server.address().address === '::' ? 'localhost' : server.address().address;
+  const port = server.address().port;
+  console.log('Server is listening at http://%s:%s', host, port);
+});
