@@ -10,12 +10,11 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded());
 // in latest body-parser use like below.
 app.use(bodyParser.urlencoded({ extended: true }));
-var server = app.listen(8000, () => {
-  console.log('Server started');
-  var host =
-    server.address().address === '::' ? 'localhost' : server.address().address;
-  var port = server.address().port;
-  console.log('Server is listening at http://%s:%s', host, port);
+const server = app.listen(8000, () => {
+    console.log('Server started');
+    const host = server.address().address === '::' ? 'localhost' : server.address().address;
+    const port = server.address().port;
+    console.log('Server is listening at http://%s:%s', host, port);
 });
 
 let fileName;
