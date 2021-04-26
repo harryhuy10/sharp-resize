@@ -13,11 +13,18 @@
   "license": "ISC",
   "dependencies": {
     "body-parser": "^1.19.0",
+    "consolidate": "^0.15.1",
+    "cors": "^2.8.5",
+    "dotenv": "^8.2.0",
     "express": "^4.17.1",
-    "gh-pages": "^3.1.0",
     "jimp": "^0.13.0",
     "multer": "^1.4.2",
     "request": "^2.88.2",
-    "sharp": "^0.25.3"
+    "s": "^1.0.0",
+    "sharp": "^0.25.4",
+    "slug": "^3.3.0"
+  },
+  "engines": {
+    "node": "12.x"
   }
 }
